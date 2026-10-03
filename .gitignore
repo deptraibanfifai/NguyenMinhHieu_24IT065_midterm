@@ -1,0 +1,11 @@
+# Tp i tng v nh phn
+*.o
+*.a
+*.out
+ls_clone
+my_ls
+
+# Tp h thng / editor
+.DS_Store
+*.swp
+.vscode/
