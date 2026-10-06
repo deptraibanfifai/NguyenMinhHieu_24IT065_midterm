@@ -47,7 +47,10 @@ int list_directory(const char *dir_path, const options_t *opts)
     filter_hidden(&list, opts);
     sort_entries(&list, opts);
     print_total(&list, opts);
-    print_short(&list, opts);
+    if (opts->long_fmt)
+        print_long(&list, opts);
+    else
+        print_short(&list, opts);
 
     entry_list_free(&list);
     return 0;

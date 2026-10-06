@@ -1,6 +1,8 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <time.h>
 #include "util.h"
 
 unsigned long get_block_size(const options_t *opts)
@@ -69,4 +71,62 @@ char classify_char(const struct stat *st)
     if (m & (S_IXUSR | S_IXGRP | S_IXOTH))
         return '*';
     return '\0';
+}
+
+void format_mode(mode_t m, char *buf)
+{
+    /* entry type */
+    if (S_ISDIR(m))       buf[0] = 'd';
+    else if (S_ISLNK(m))  buf[0] = 'l';
+    else if (S_ISBLK(m))  buf[0] = 'b';
+    else if (S_ISCHR(m))  buf[0] = 'c';
+    else if (S_ISSOCK(m)) buf[0] = 's';
+    else if (S_ISFIFO(m)) buf[0] = 'p';
+#ifdef S_ISWHT
+    else if (S_ISWHT(m))  buf[0] = 'w';
+#endif
+    else                  buf[0] = '-';
+
+    /* owner */
+    buf[1] = (m & S_IRUSR) ? 'r' : '-';
+    buf[2] = (m & S_IWUSR) ? 'w' : '-';
+    if (m & S_ISUID)
+        buf[3] = (m & S_IXUSR) ? 's' : 'S';
+    else
+        buf[3] = (m & S_IXUSR) ? 'x' : '-';
+
+    /* group */
+    buf[4] = (m & S_IRGRP) ? 'r' : '-';
+    buf[5] = (m & S_IWGRP) ? 'w' : '-';
+    if (m & S_ISGID)
+        buf[6] = (m & S_IXGRP) ? 's' : 'S';
+    else
+        buf[6] = (m & S_IXGRP) ? 'x' : '-';
+
+    /* other */
+    buf[7] = (m & S_IROTH) ? 'r' : '-';
+    buf[8] = (m & S_IWOTH) ? 'w' : '-';
+    if (m & S_ISVTX)
+        buf[9] = (m & S_IXOTH) ? 't' : 'T';
+    else
+        buf[9] = (m & S_IXOTH) ? 'x' : '-';
+
+    buf[10] = '\0';
+}
+
+void format_time(time_t t, char *buf, size_t buflen)
+{
+    struct tm tmv;
+    time_t    now = time(NULL);
+    /* about 6 months */
+    const time_t six_months = 182L * 24 * 60 * 60;
+
+    if (localtime_r(&t, &tmv) == NULL) {
+        snprintf(buf, buflen, "?");
+        return;
+    }
+    if (t > now + 60 || now - t > six_months)
+        strftime(buf, buflen, "%b %e  %Y", &tmv);   /* old/future: year */
+    else
+        strftime(buf, buflen, "%b %e %H:%M", &tmv);
 }
