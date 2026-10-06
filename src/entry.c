@@ -1,96 +1,125 @@
+#include <dirent.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
 #include "entry.h"
 
-void init_entry_list(entry_list_t *list) {
-    if (!list) return;
-    list->entries = NULL;
-    list->count = 0;
+void entry_list_init(entry_list_t *list)
+{
+    list->items    = NULL;
+    list->count    = 0;
     list->capacity = 0;
-    list->total_blocks = 0;
 }
 
-void free_entry_list(entry_list_t *list) {
-    if (!list) return;
+void entry_list_free(entry_list_t *list)
+{
     for (size_t i = 0; i < list->count; i++) {
-        free(list->entries[i].name);
-        free(list->entries[i].path);
+        free(list->items[i].name);
+        free(list->items[i].path);
     }
-    free(list->entries);
-    init_entry_list(list);
+    free(list->items);
+    entry_list_init(list);
 }
 
-void add_entry(entry_list_t *list, const char *path, const char *name, const options_t *opts) {
-    if (!list || !name) return;
+/* Make sure there is room for at least one more element. */
+static int list_grow(entry_list_t *list)
+{
+    if (list->count < list->capacity)
+        return 0;
 
-    if (list->count >= list->capacity) {
-        size_t new_cap = (list->capacity == 0) ? 16 : list->capacity * 2;
-        entry_t *new_entries = realloc(list->entries, new_cap * sizeof(entry_t));
-        if (!new_entries) return;
-        list->entries = new_entries;
-        list->capacity = new_cap;
+    size_t   new_cap = list->capacity ? list->capacity * 2 : 16;
+    entry_t *tmp     = realloc(list->items, new_cap * sizeof(entry_t));
+    if (tmp == NULL)
+        return -1;
+
+    list->items    = tmp;
+    list->capacity = new_cap;
+    return 0;
+}
+
+/* strdup replacement (not in strict C99). */
+static char *copy_string(const char *s)
+{
+    size_t len = strlen(s) + 1;
+    char  *p   = malloc(len);
+    if (p != NULL)
+        memcpy(p, s, len);
+    return p;
+}
+
+char *join_path(const char *dir, const char *name)
+{
+    size_t dlen = strlen(dir);
+    size_t nlen = strlen(name);
+    char  *p    = malloc(dlen + nlen + 2);
+    if (p == NULL)
+        return NULL;
+
+    memcpy(p, dir, dlen);
+    /* avoid "//" when dir already ends with '/' */
+    if (dlen > 0 && dir[dlen - 1] != '/')
+        p[dlen++] = '/';
+    memcpy(p + dlen, name, nlen + 1);
+    return p;
+}
+
+int entry_list_add(entry_list_t *list, const char *name, const char *path)
+{
+    struct stat st;
+
+    if (lstat(path, &st) == -1) {
+        fprintf(stderr, "ls: %s: %s\n", path, strerror(errno));
+        return 1;
     }
 
-    entry_t *e = &list->entries[list->count];
-    e->name = strdup(name);
-    e->path = path ? strdup(path) : strdup(name);
-    
-    if (lstat(e->path, &e->st) == 0) {
-        e->stat_valid = true;
-        
-        /* Chn mc thi gian ph hp theo c */
-        if (opts) {
-            if (opts->time_kind == TIME_CTIME) e->sel_time = e->st.st_ctime;
-            else if (opts->time_kind == TIME_ATIME) e->sel_time = e->st.st_atime;
-            else e->sel_time = e->st.st_mtime;
-        } else {
-            e->sel_time = e->st.st_mtime;
-        }
+    if (list_grow(list) == -1)
+        return -1;
 
-        /* 512-byte blocks chun POSIX */
-        list->total_blocks += e->st.st_blocks;
-    } else {
-        e->stat_valid = false;
-        e->sel_time = 0;
+    entry_t *e = &list->items[list->count];
+    e->name = copy_string(name);
+    e->path = copy_string(path);
+    if (e->name == NULL || e->path == NULL) {
+        free(e->name);
+        free(e->path);
+        return -1;
     }
-
+    e->st      = st;
+    e->stat_ok = 1;
     list->count++;
+    return 0;
 }
 
-bool read_directory(const char *dir_path, entry_list_t *list, const options_t *opts) {
-    DIR *dir = opendir(dir_path);
-    if (!dir) {
-        fprintf(stderr, "my_ls: %s: %s\n", dir_path, strerror(errno));
-        return false;
+int read_directory(const char *dir_path, entry_list_t *list)
+{
+    DIR *dp = opendir(dir_path);
+    if (dp == NULL) {
+        fprintf(stderr, "ls: %s: %s\n", dir_path, strerror(errno));
+        return -1;
     }
 
-    struct dirent *dp;
-    while ((dp = readdir(dir)) != NULL) {
-        /* B qua . v .. nu chn -A (almost_all) */
-        if (opts->almost_all && !opts->all) {
-            if (strcmp(dp->d_name, ".") == 0 || strcmp(dp->d_name, "..") == 0) {
-                continue;
-            }
+    struct dirent *de;
+    errno = 0;
+    while ((de = readdir(dp)) != NULL) {
+        char *full = join_path(dir_path, de->d_name);
+        if (full == NULL) {
+            fprintf(stderr, "ls: out of memory\n");
+            closedir(dp);
+            return -1;
         }
-        
-        /* B qua tp n (bt u bng .) nu khng bt -a hoc -A */
-        if (!opts->all && !opts->almost_all && dp->d_name[0] == '.') {
-            continue;
+        /* an lstat error on one entry does not stop the whole directory */
+        int rc = entry_list_add(list, de->d_name, full);
+        free(full);
+        if (rc == -1) {
+            fprintf(stderr, "ls: out of memory\n");
+            closedir(dp);
+            return -1;
         }
-
-        /* To full path  lstat */
-        char full_path[1024];
-        if (strcmp(dir_path, "/") == 0) {
-            snprintf(full_path, sizeof(full_path), "/%s", dp->d_name);
-        } else {
-            snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, dp->d_name);
-        }
-
-        add_entry(list, full_path, dp->d_name, opts);
+        errno = 0;
     }
+    if (errno != 0)
+        fprintf(stderr, "ls: %s: %s\n", dir_path, strerror(errno));
 
-    closedir(dir);
-    return true;
+    closedir(dp);
+    return 0;
 }

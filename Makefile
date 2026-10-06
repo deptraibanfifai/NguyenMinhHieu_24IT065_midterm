@@ -1,8 +1,8 @@
-CC      = gcc
-CFLAGS  = -Wall -Wextra -Werror -std=c99 -D_DEFAULT_SOURCE -Iinclude -g
-TARGET  = my_ls
-SRC     = $(wildcard src/*.c)
-OBJ     = $(SRC:.c=.o)
+CC     = gcc
+CFLAGS = -Wall -Wextra -Werror -std=c99 -D_DEFAULT_SOURCE -Iinclude -g
+TARGET = my_ls
+SRC    = $(wildcard src/*.c)
+OBJ    = $(SRC:.c=.o)
 
 all: $(TARGET)
 

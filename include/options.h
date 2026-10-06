@@ -3,16 +3,16 @@
 
 #include <stdbool.h>
 
-/* Loi thi gian dng  sp xp (-t) hoc in (-l) */
+/* Which timestamp is used for sorting (-t) and printing (-l) */
 typedef enum { TIME_MTIME, TIME_CTIME, TIME_ATIME } time_kind_t;
 
-/* n v hin th kch thc/block */
+/* How sizes/blocks are displayed */
 typedef enum { SIZE_BLOCK, SIZE_KILO, SIZE_HUMAN } size_kind_t;
 
-/* Cch in k t khng in c trong tn tp */
+/* How non-printable characters in names are shown */
 typedef enum { NP_QUESTION, NP_RAW } nonprint_t;
 
-/* Ton b ty chn dng lnh */
+/* All command line options */
 typedef struct {
     bool all;          /* -a */
     bool almost_all;   /* -A */
@@ -20,7 +20,7 @@ typedef struct {
     bool classify;     /* -F */
     bool no_sort;      /* -f */
     bool inode;        /* -i */
-    bool long_fmt;     /* -l hoc -n */
+    bool long_fmt;     /* -l or -n */
     bool numeric;      /* -n */
     bool recursive;    /* -R */
     bool reverse;      /* -r */
@@ -33,9 +33,8 @@ typedef struct {
 } options_t;
 
 /*
- * Phn tch argc/argv, in vo opts.
- * Tr v ch s ca ton hng u tin trong argv (optind),
- * hoc -1 nu c ty chn khng hp l.
+ * Parse argc/argv and fill opts.
+ * Returns index of the first operand in argv, or -1 on invalid option.
  */
 int parse_options(int argc, char *argv[], options_t *opts);
 
