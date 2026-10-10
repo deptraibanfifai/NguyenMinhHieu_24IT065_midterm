@@ -90,36 +90,59 @@ int entry_list_add(entry_list_t *list, const char *name, const char *path)
     return 0;
 }
 
+/*
+ * Returns -1 on a fatal error, 1 on a partial listing with errors,
+ * and 0 when all entries were read successfully.
+ */
 int read_directory(const char *dir_path, entry_list_t *list)
 {
     DIR *dp = opendir(dir_path);
+
     if (dp == NULL) {
         fprintf(stderr, "ls: %s: %s\n", dir_path, strerror(errno));
         return -1;
     }
 
-    struct dirent *de;
-    errno = 0;
-    while ((de = readdir(dp)) != NULL) {
+    int failed = 0;
+
+    for (;;) {
+        errno = 0;
+        struct dirent *de = readdir(dp);
+
+        if (de == NULL) {
+            if (errno != 0) {
+                fprintf(stderr, "ls: %s: %s\n",
+                        dir_path, strerror(errno));
+                failed = 1;
+            }
+            break;
+        }
+
         char *full = join_path(dir_path, de->d_name);
+
         if (full == NULL) {
             fprintf(stderr, "ls: out of memory\n");
             closedir(dp);
             return -1;
         }
-        /* an lstat error on one entry does not stop the whole directory */
+
         int rc = entry_list_add(list, de->d_name, full);
         free(full);
-        if (rc == -1) {
+
+        if (rc < 0) {
             fprintf(stderr, "ls: out of memory\n");
             closedir(dp);
             return -1;
         }
-        errno = 0;
-    }
-    if (errno != 0)
-        fprintf(stderr, "ls: %s: %s\n", dir_path, strerror(errno));
 
-    closedir(dp);
-    return 0;
+        if (rc != 0)
+            failed = 1;
+    }
+
+    if (closedir(dp) == -1) {
+        fprintf(stderr, "ls: %s: %s\n", dir_path, strerror(errno));
+        failed = 1;
+    }
+
+    return failed;
 }

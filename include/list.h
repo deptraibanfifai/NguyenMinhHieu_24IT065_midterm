@@ -4,15 +4,16 @@
 #include "entry.h"
 #include "options.h"
 
-/*
- * Remove entries that must not be shown:
- *  default: names starting with '.'
- *  -A:      keep dotfiles except "." and ".."
- *  -a:      keep everything
- */
+/* Filter hidden directory entries according to -a and -A. */
 void filter_hidden(entry_list_t *list, const options_t *opts);
 
-/* List one directory: read, filter, sort, print. Returns 0 on success. */
+/* List the contents of one directory. */
 int list_directory(const char *dir_path, const options_t *opts);
 
-#endif /* LIST_H */
+/*
+ * Handle all operands, with files first and directories second.
+ * Returns 0 on success and 1 if any operation fails.
+ */
+int list_operands(int count, char **paths, const options_t *opts);
+
+#endif

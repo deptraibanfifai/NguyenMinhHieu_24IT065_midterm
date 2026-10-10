@@ -3,43 +3,44 @@
 #include <time.h>
 #include "sort.h"
 
-/* qsort cannot take extra arguments, so keep opts in a static variable */
 static const options_t *g_opts;
 
-/* Timestamp of an entry according to -c / -u (default: mtime). */
-static time_t get_time(const entry_t *e, time_kind_t kind)
+/* Preserve sub-second precision when timestamps share a second. */
+static struct timespec selected_time(const entry_t *e)
 {
-    switch (kind) {
-    case TIME_CTIME: return e->st.st_ctime;
-    case TIME_ATIME: return e->st.st_atime;
-    default:         return e->st.st_mtime;
+    switch (g_opts->time_kind) {
+    case TIME_CTIME:
+        return e->st.st_ctim;
+    case TIME_ATIME:
+        return e->st.st_atim;
+    default:
+        return e->st.st_mtim;
     }
 }
 
-/* Main comparison (without -r). Never use a - b: types are 64-bit. */
-static int cmp_entries(const void *pa, const void *pb)
+static int compare_entries(const void *pa, const void *pb)
 {
     const entry_t *a = pa;
     const entry_t *b = pb;
+    int result = 0;
 
     if (g_opts->sort_size) {
         if (a->st.st_size != b->st.st_size)
-            return (a->st.st_size < b->st.st_size) ? 1 : -1;
+            result = a->st.st_size < b->st.st_size ? 1 : -1;
     } else if (g_opts->sort_time) {
-        time_t ta = get_time(a, g_opts->time_kind);
-        time_t tb = get_time(b, g_opts->time_kind);
-        if (ta != tb)
-            return (ta < tb) ? 1 : -1;      /* newest first */
+        struct timespec ta = selected_time(a);
+        struct timespec tb = selected_time(b);
+
+        if (ta.tv_sec != tb.tv_sec)
+            result = ta.tv_sec < tb.tv_sec ? 1 : -1;
+        else if (ta.tv_nsec != tb.tv_nsec)
+            result = ta.tv_nsec < tb.tv_nsec ? 1 : -1;
     }
 
-    return strcmp(a->name, b->name);        /* tie-break / default: name */
-}
+    if (result == 0)
+        result = strcmp(a->name, b->name);
 
-/* Comparison including -r. */
-static int cmp_final(const void *pa, const void *pb)
-{
-    int r = cmp_entries(pa, pb);
-    return g_opts->reverse ? -r : r;
+    return g_opts->reverse ? -result : result;
 }
 
 void sort_entries(entry_list_t *list, const options_t *opts)
@@ -48,5 +49,5 @@ void sort_entries(entry_list_t *list, const options_t *opts)
         return;
 
     g_opts = opts;
-    qsort(list->items, list->count, sizeof(entry_t), cmp_final);
+    qsort(list->items, list->count, sizeof(entry_t), compare_entries);
 }

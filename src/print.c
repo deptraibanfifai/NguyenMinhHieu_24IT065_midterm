@@ -59,19 +59,30 @@ void print_total(const entry_list_t *list, const options_t *opts)
 void print_short(const entry_list_t *list, const options_t *opts)
 {
     char blocks[32];
+    char inode[32];
+    size_t bw = 0;
+    size_t iw = 0;
 
     for (size_t i = 0; i < list->count; i++) {
         const entry_t *e = &list->items[i];
-
+        format_blocks(e, opts, blocks, sizeof(blocks));
+        snprintf(inode, sizeof(inode), "%llu",
+                 (unsigned long long)e->st.st_ino);
+        if (strlen(blocks) > bw)
+            bw = strlen(blocks);
+        if (strlen(inode) > iw)
+            iw = strlen(inode);
+    }
+    for (size_t i = 0; i < list->count; i++) {
+        const entry_t *e = &list->items[i];
         if (opts->inode)
-            printf("%llu ", (unsigned long long)e->st.st_ino);
+            printf("%*llu ", (int)iw,
+                   (unsigned long long)e->st.st_ino);
         if (opts->show_blocks) {
             format_blocks(e, opts, blocks, sizeof(blocks));
-            printf("%s ", blocks);
+            printf("%*s ", (int)bw, blocks);
         }
-
         print_name(e->name, opts);
-
         if (opts->classify) {
             char c = classify_char(&e->st);
             if (c != '\0')
@@ -170,7 +181,7 @@ void print_long(const entry_list_t *list, const options_t *opts)
     row_t *rows = calloc(list->count, sizeof(row_t));
     if (rows == NULL) {
         fprintf(stderr, "ls: out of memory\n");
-        return;
+        exit(EXIT_FAILURE);
     }
 
     /* pass 1: format every row and find column widths */
@@ -195,7 +206,7 @@ void print_long(const entry_list_t *list, const options_t *opts)
         if (opts->show_blocks)
             printf("%*s ", (int)w_blk, r->blk);
 
-        printf("%s %*s %-*s  %-*s  %*s %s ",
+        printf("%s  %*s %-*s  %-*s  %*s %s ",
                r->mode,
                (int)w_nl,  r->nlink,
                (int)w_own, r->owner,

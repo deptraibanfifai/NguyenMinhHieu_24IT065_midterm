@@ -39,7 +39,7 @@ int list_directory(const char *dir_path, const options_t *opts)
     entry_list_t list;
     entry_list_init(&list);
 
-    if (read_directory(dir_path, &list) == -1) {
+    if (read_directory(dir_path, &list) != 0) {
         entry_list_free(&list);
         return -1;
     }
